@@ -39,7 +39,9 @@ class ShowIcon(CustomizationCore):
                          **kwargs)
 
     def get_config_rows(self) -> list:
-        """Get the rows to be displayed in the UI."""
+        """Build and populate configuration rows on the GTK main thread."""
+        self.ensure_config_ui()
+        self._populate_config_ui()
         return [self.domain_combo.widget, self.entity_combo.widget, self.icon.widget, self.color.widget,
                 self.scale.widget, self.opacity.widget, self.customization_expander.widget]
 
@@ -123,6 +125,9 @@ class ShowIcon(CustomizationCore):
     def refresh(self, state: dict = None) -> None:
         """
         Executed when an entity is updated to reflect the changes on the key.
+
+        Renders the key image only (safe to run off the main thread). Config-UI
+        state is handled separately in ``_populate_config_ui``.
         """
         if not self.initialized:
             if not self.plugin_base.backend.is_connected():
@@ -140,9 +145,6 @@ class ShowIcon(CustomizationCore):
 
         icon, scale = icon_helper.get_icon(state, self.settings, self.plugin_base.backend.is_connected())
         self.set_media(media_path=icon, size=scale)
-
-        self._load_customizations()
-        self.set_enabled_disabled()
 
     def _on_browse_clicked(self, *_) -> None:
         dialog = FileDialog()
@@ -177,4 +179,7 @@ class ShowIcon(CustomizationCore):
 
     def _get_domains(self) -> list[str]:
         """This class needs all domains that provide actions in Home Assistant."""
+        getter = getattr(self.plugin_base.backend, "get_cached_domains_for_entities", None)
+        if callable(getter) and not hasattr(getter, "return_value"):
+            return getter()
         return self.plugin_base.backend.get_domains_for_entities()

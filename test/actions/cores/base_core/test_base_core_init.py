@@ -30,6 +30,7 @@ class TestBaseCoreInit(unittest.TestCase):
         self.assertEqual(track_entity, instance.track_entity)
         self.assertEqual((test_arg,), instance.args)
         self.assertEqual({"test_kwarg": test_kwarg}, instance.kwargs)
-        create_ui_elements_mock.assert_called_once()
+        create_ui_elements_mock.assert_not_called()
         create_event_assigner_mock.assert_called_once()
+        self.assertFalse(instance._config_ui_created)
 

@@ -488,7 +488,7 @@ class TestShowText(unittest.TestCase):
         instance.set_center_label.assert_called_once_with(text_const.EMPTY_STRING)
         instance.set_bottom_label.assert_called_once_with(text_const.EMPTY_STRING)
         instance.settings.get_entity.assert_called_once()
-        instance._load_attributes.assert_called_once()
+        instance._load_attributes.assert_not_called()
         instance._load_customizations.assert_not_called()
         instance.set_enabled_disabled.assert_not_called()
 
@@ -516,11 +516,11 @@ class TestShowText(unittest.TestCase):
         instance.set_center_label.assert_called_once_with(text_const.EMPTY_STRING)
         instance.set_bottom_label.assert_called_once_with(text_const.EMPTY_STRING)
         instance.settings.get_entity.assert_called_once()
-        instance._load_attributes.assert_called_once()
+        instance._load_attributes.assert_not_called()
         text_helper_mock.get_text.assert_called_once_with({"state": "state"}, instance.settings, True)
         instance.set_label.assert_called_once_with("a", "b", "d", None, "c", "e", "f", None, None, True)
-        instance._load_customizations.assert_called_once()
-        instance.set_enabled_disabled.assert_called_once()
+        instance._load_customizations.assert_not_called()
+        instance.set_enabled_disabled.assert_not_called()
 
     def test_get_domains(self):
         instance = ShowText.__new__(ShowText)

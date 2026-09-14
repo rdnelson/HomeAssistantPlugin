@@ -207,11 +207,9 @@ class LevelDial(CustomizationCore):
             super().set_label(text, position, color, font_family, font_size,
                               outline_width, outline_color, font_weight, font_style, update)
 
-    def on_ready(self) -> None:
-        super().on_ready()
-        self._reload()
-
     def get_config_rows(self) -> list:
+        self.ensure_config_ui()
+        self._populate_config_ui()
         return [
             self.domain_combo.widget,
             self.entity_combo.widget,
@@ -357,6 +355,8 @@ class LevelDial(CustomizationCore):
         self.plugin_base.backend.perform_action(domain, service, entity, params)
 
     def refresh(self, state: dict = None) -> None:
+        """Render the dial key (safe to run off the main thread). Config-UI
+        state is handled separately in ``_populate_config_ui``."""
         if not self.initialized:
             return
 
@@ -433,9 +433,6 @@ class LevelDial(CustomizationCore):
         if icon_img:
             self.set_media(image=icon_img, size=0.75)
 
-        self._load_customizations()
-        self.set_enabled_disabled()
-
     @requires_initialization
     def set_enabled_disabled(self) -> None:
         super().set_enabled_disabled()
@@ -462,5 +459,7 @@ class LevelDial(CustomizationCore):
 
     @requires_initialization
     def _get_domains(self) -> list[str]:
-        available = set(self.plugin_base.backend.get_domains_for_entities())
+        getter = getattr(self.plugin_base.backend, "get_cached_domains_for_entities", None)
+        domains = getter() if callable(getter) and not hasattr(getter, "return_value") else self.plugin_base.backend.get_domains_for_entities()
+        available = set(domains)
         return [d for d in level_const.DOMAIN_CONFIGS if d in available]

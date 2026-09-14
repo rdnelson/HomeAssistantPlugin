@@ -40,7 +40,9 @@ class ShowText(CustomizationCore):
                          **kwargs)
 
     def get_config_rows(self) -> list:
-        """Get the rows to be displayed in the UI."""
+        """Build and populate configuration rows on the GTK main thread."""
+        self.ensure_config_ui()
+        self._populate_config_ui()
         return [self.domain_combo.widget, self.entity_combo.widget, self.position.widget, self.attribute.widget,
                 self.round.widget, self.text_size.widget, self.text_color.widget,
                 self.outline_size.widget, self.outline_color.widget, self.show_unit.widget, self.unit_line_break.widget,
@@ -224,6 +226,11 @@ class ShowText(CustomizationCore):
         self._load_attributes()
         super().on_change_entity(_, entity, old_entity)
 
+    def _populate_extra_config(self) -> None:
+        """Populate the attribute combo when the config panel is built."""
+        self._load_attributes()
+        super()._populate_extra_config()
+
     def _load_attributes(self):
         attribute = self.settings.get_attribute()
         attributes = self._get_attributes()
@@ -245,6 +252,9 @@ class ShowText(CustomizationCore):
     def refresh(self, state: dict = None) -> None:
         """
         Executed when an entity is updated to reflect the changes on the key.
+
+        Renders the key labels only (safe to run off the main thread). Config-UI
+        state is handled separately in ``_populate_config_ui``.
         """
         self.set_top_label(text_const.EMPTY_STRING)
         self.set_center_label(text_const.EMPTY_STRING)
@@ -264,9 +274,6 @@ class ShowText(CustomizationCore):
         if not entity:
             return
 
-        # the attributes of the entity might have changed
-        self._load_attributes()
-
         if state is None:
             state = self.plugin_base.backend.get_entity(entity)
 
@@ -281,9 +288,9 @@ class ShowText(CustomizationCore):
             None, None, True
         )
 
-        self._load_customizations()
-        self.set_enabled_disabled()
-
     def _get_domains(self) -> list[str]:
         """This class needs all domains that provide actions in Home Assistant."""
+        getter = getattr(self.plugin_base.backend, "get_cached_domains_for_entities", None)
+        if callable(getter) and not hasattr(getter, "return_value"):
+            return getter()
         return self.plugin_base.backend.get_domains_for_entities()

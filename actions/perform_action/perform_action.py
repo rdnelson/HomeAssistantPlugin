@@ -26,15 +26,10 @@ class PerformAction(BaseCore):
         self.parameters_expander = None
         super().__init__(settings_implementation=PerformActionSettings, track_entity=False, *args, **kwargs)
 
-    def on_ready(self) -> None:
-        """Set up action when StreamController has finished loading."""
-        super().on_ready()
-
-        if not self.plugin_base.backend.is_connected():
-            return
-
+    def _populate_extra_config(self) -> None:
+        """Populate the action combo when the config panel is built."""
+        super()._populate_extra_config()
         self._load_actions()
-        self._reload()
 
     @requires_initialization
     def _perform_action(self, _) -> None:
@@ -67,7 +62,9 @@ class PerformAction(BaseCore):
         ))
 
     def get_config_rows(self) -> list:
-        """Get the rows to be displayed in the UI."""
+        """Build and populate configuration rows on the GTK main thread."""
+        self.ensure_config_ui()
+        self._populate_config_ui()
         return [self.domain_combo.widget, self.action_combo.widget, self.entity_combo.widget,
                 self.parameters_expander.widget]
 
@@ -185,4 +182,7 @@ class PerformAction(BaseCore):
     @requires_initialization
     def _get_domains(self) -> list[str]:
         """This class needs all domains that provide actions in Home Assistant."""
+        getter = getattr(self.plugin_base.backend, "get_cached_domains_for_actions", None)
+        if callable(getter) and not hasattr(getter, "return_value"):
+            return getter()
         return self.plugin_base.backend.get_domains_for_actions()

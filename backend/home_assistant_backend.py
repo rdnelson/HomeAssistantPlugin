@@ -2,7 +2,7 @@
 Module for the Home Assistant backend.
 """
 
-from threading import Thread
+from threading import Lock, Thread
 from time import sleep
 from typing import Callable, Any, Optional
 
@@ -25,6 +25,7 @@ class HomeAssistantBackend:
         self._keep_alive_thread: Optional[Thread] = None
         self._retry_connect_thread: Optional[Thread] = None
         self._action_ready_callbacks: set[Callable] = set()
+        self._action_ready_callbacks_lock = Lock()
 
         self._host: str = backend_const.EMPTY_STRING
         self.set_host(host)
@@ -116,7 +117,9 @@ class HomeAssistantBackend:
         self._load_actions()
         self._readd_tracked_entities()
 
-        for ready in self._action_ready_callbacks:
+        with self._action_ready_callbacks_lock:
+            ready_callbacks = tuple(self._action_ready_callbacks)
+        for ready in ready_callbacks:
             GLib.idle_add(ready)
 
     def _on_event_message(self, message: dict) -> None:
@@ -173,30 +176,40 @@ class HomeAssistantBackend:
             # the call comes from an obsolete websocket instance
             return
         log.info(backend_const.INFO_DISCONNECTED)
-        for ready in self._action_ready_callbacks:
+        with self._action_ready_callbacks_lock:
+            ready_callbacks = tuple(self._action_ready_callbacks)
+        for ready in ready_callbacks:
             GLib.idle_add(ready)
         sleep(backend_const.RECONNECT_INTERVAL)
         if websocket == self._websocket:
             # the websocket instance is still the same, so we can try to reconnect
             self.connect()
 
-    def get_domains_for_entities(self) -> list[str]:
-        """Get a list of all domains known to Home Assistant."""
-        if self._entities:
-            return list(self._entities.keys())
-        if not self.is_connected():
-            return []
-        self._load_entities()
+    def get_cached_domains_for_entities(self) -> list[str]:
+        """Return entity domains currently held in the local cache."""
         return list(self._entities.keys())
 
-    def get_domains_for_actions(self) -> list[str]:
-        """Get a list of all domains known to Home Assistant."""
+    def get_domains_for_entities(self, load: bool = True) -> list[str]:
+        """Get entity domains, optionally loading them from Home Assistant."""
+        if self._entities:
+            return self.get_cached_domains_for_entities()
+        if not load or not self.is_connected():
+            return []
+        self._load_entities()
+        return self.get_cached_domains_for_entities()
+
+    def get_cached_domains_for_actions(self) -> list[str]:
+        """Return action domains currently held in the local cache."""
+        return list(self._actions.keys())
+
+    def get_domains_for_actions(self, load: bool = True) -> list[str]:
+        """Get action domains, optionally loading them from Home Assistant."""
         if self._actions:
-            return list(self._actions.keys())
-        if not self.is_connected():
+            return self.get_cached_domains_for_actions()
+        if not load or not self.is_connected():
             return []
         self._load_actions()
-        return list(self._actions.keys())
+        return self.get_cached_domains_for_actions()
 
     def get_entity(self, entity_id: str) -> dict[str, Any]:
         """Return the entity state with the requested name."""
@@ -215,6 +228,8 @@ class HomeAssistantBackend:
 
     def _load_entities(self) -> None:
         """Loads the domains and entities from Home Assistant."""
+        if not self.is_connected():
+            return
         success, result, error = self._websocket.send_and_recv(backend_const.GET_STATES)
 
         if not success:
@@ -250,16 +265,23 @@ class HomeAssistantBackend:
 
         self._entities = entities
 
-    def get_entities(self, domain: str) -> list[str]:
-        """Return a list of all entities known to Home Assistant."""
+    def get_cached_entities(self, domain: str) -> list[str]:
+        """Return entities currently held in the local cache."""
         if not domain:
             return []
-        if self._entities:
-            return list(self._entities.get(domain, {}).keys())
-        self._load_entities()
         return list(self._entities.get(domain, {}).keys())
 
+    def get_entities(self, domain: str, load: bool = True) -> list[str]:
+        """Return entities, optionally loading them when connected."""
+        if not domain:
+            return []
+        if load and not self._entities and self.is_connected():
+            self._load_entities()
+        return self.get_cached_entities(domain)
+
     def _load_actions(self) -> None:
+        if not self.is_connected():
+            return
         success, result, error = self._websocket.send_and_recv(backend_const.GET_SERVICES)
 
         if not success:
@@ -269,13 +291,17 @@ class HomeAssistantBackend:
 
         self._actions = result
 
-    def get_actions(self, domain: str) -> dict[str, dict[str, Any]]:
-        """Return all actions known to Home Assistant for the domain."""
-        if not self._actions:
-            self._load_actions()
+    def get_cached_actions(self, domain: str) -> dict[str, dict[str, Any]]:
+        """Return actions currently held in the local cache."""
         if not self._actions:
             return {}
         return self._actions.get(domain, {})
+
+    def get_actions(self, domain: str) -> dict[str, dict[str, Any]]:
+        """Return actions, loading them only when a connection is available."""
+        if not self._actions and self.is_connected():
+            self._load_actions()
+        return self.get_cached_actions(domain)
 
     def perform_action(
             self, domain: str, service: str, entity_id: Optional[str], data: Optional[dict[str, Any]] = None
@@ -294,11 +320,13 @@ class HomeAssistantBackend:
 
     def add_action_ready_callback(self, on_ready: Callable) -> None:
         """Register a callback to be called when the action is ready."""
-        self._action_ready_callbacks.add(on_ready)
+        with self._action_ready_callbacks_lock:
+            self._action_ready_callbacks.add(on_ready)
 
     def remove_action_ready_callback(self, on_ready: Callable) -> None:
         """Deregister a callback that was registered to be called when the action is ready."""
-        self._action_ready_callbacks.discard(on_ready)
+        with self._action_ready_callbacks_lock:
+            self._action_ready_callbacks.discard(on_ready)
 
     def add_tracked_entity(
             self, entity_id: str, action_entity_updated: Callable

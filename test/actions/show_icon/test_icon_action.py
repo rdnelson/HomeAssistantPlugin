@@ -245,8 +245,8 @@ class TestShowIcon(unittest.TestCase):
         instance.plugin_base.backend.get_entity.assert_called_once_with("entity_id")
         icon_helper_mock.get_icon.assert_called_once_with(state, instance.settings, True)
         instance.set_media.assert_called_once_with(media_path="icon_path", size=3)
-        instance._load_customizations.assert_called_once()
-        instance.set_enabled_disabled.assert_called_once()
+        instance._load_customizations.assert_not_called()
+        instance.set_enabled_disabled.assert_not_called()
 
     @patch('HomeAssistantPlugin.actions.show_icon.icon_action.icon_helper')
     def test_refresh_state_as_parameter(self, icon_helper_mock):
@@ -268,8 +268,8 @@ class TestShowIcon(unittest.TestCase):
         instance.plugin_base.backend.get_entity.assert_not_called()
         icon_helper_mock.get_icon.assert_called_once_with(state, instance.settings, True)
         instance.set_media.assert_called_once_with(media_path="icon_path", size=3)
-        instance._load_customizations.assert_called_once()
-        instance.set_enabled_disabled.assert_called_once()
+        instance._load_customizations.assert_not_called()
+        instance.set_enabled_disabled.assert_not_called()
 
     def test_get_domains(self):
         instance = ShowIcon.__new__(ShowIcon)

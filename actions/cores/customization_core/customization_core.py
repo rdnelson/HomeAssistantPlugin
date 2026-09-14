@@ -27,15 +27,10 @@ class CustomizationCore(BaseCore):
         self.customization_implementation = customization_implementation
         self.row_implementation = row_implementation
 
-    def on_ready(self) -> None:
-        """Set up action when StreamController has finished loading."""
-        super().on_ready()
-
-        if not self.plugin_base.backend.is_connected():
-            self.refresh()
-            return
-
-        self._reload()
+    def _populate_extra_config(self) -> None:
+        """Populate the customization rows when the config panel is built."""
+        super()._populate_extra_config()
+        self._load_customizations()
 
     def create_ui_elements(self) -> None:
         """Get all action rows."""
